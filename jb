@@ -1,0 +1,43 @@
+#!/usr/bin/env ruby
+require 'json'
+require 'ostruct'
+
+def walk(obj)
+  if obj.is_a? OpenStruct
+    walk(obj.to_h)
+  else
+    obj
+  end
+end
+
+def rwalk(obj)
+  if obj.is_a? Hash
+    os = OpenStruct.new
+    obj.each do |k,v|
+      os[k.downcase] = v
+      os[k] = v
+    end
+    os
+  else
+    obj
+  end
+end
+
+def execute(_, code)
+  result = walk(rwalk(_).instance_eval(&code))
+  if result.nil?
+    # no-op
+  elsif STDOUT.tty? and result.is_a? Hash
+    puts JSON.pretty_generate(result)
+  else
+    JSON.dump result, STDOUT
+    puts
+  end
+rescue Errno::EPIPE
+  exit
+end
+
+single_line = ARGV[0] == '-l'
+code = ARGV.drop(single_line ? 1 : 0).join(' ')
+code = eval("Proc.new { #{code} }")
+single_line ? STDIN.each { |l| execute(JSON.parse(l.strip), code) } : execute(JSON.load(STDIN, nil), code)
